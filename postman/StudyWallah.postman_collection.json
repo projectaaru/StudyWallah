@@ -1,0 +1,463 @@
+{
+  "info": {
+    "name": "StudyWallah API (ProjectAaru)",
+    "_postman_id": "9a1f2b3c-4d5e-4f6a-8b9c-0d1e2f3a4b5c",
+    "description": "Complete end-to-end API test suite for StudyWallah covering Freedom/Secret pairing, signal lifecycle, RED->GREEN acknowledgement, role isolation (403), and single-use invitation enforcement.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8080" },
+    { "key": "freedomEmail", "value": "freedom.demo@studywallah.local" },
+    { "key": "secretEmail", "value": "secret.demo@studywallah.local" },
+    { "key": "demoPassword", "value": "StrongPass123!" },
+    { "key": "freedomToken", "value": "" },
+    { "key": "secretToken", "value": "" },
+    { "key": "invitationCode", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "00 - System",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Service is ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          }
+        },
+        {
+          "name": "Readiness Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Database connected', () => pm.expect(pm.response.json().database).to.eql('connected'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/ready"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Pairing & Auth Flow",
+      "item": [
+        {
+          "name": "1. Register Freedom Partner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.user.role).to.eql('FREEDOM_PARTNER');",
+                  "pm.expect(data.invitation.code).to.be.a('string').and.not.be.empty;",
+                  "pm.collectionVariables.set('freedomToken', data.token);",
+                  "pm.collectionVariables.set('invitationCode', data.invitation.code);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Aaru Freedom\",\n  \"email\": \"{{freedomEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/register-freedom"
+          }
+        },
+        {
+          "name": "2. Obtain Invitation Code (Freedom Partner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.code).to.eql(pm.collectionVariables.get('invitationCode'));",
+                  "pm.expect(data.used).to.eql(false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{freedomToken}}", "type": "string" }]
+            },
+            "url": "{{baseUrl}}/api/v1/freedom/invitation"
+          }
+        },
+        {
+          "name": "3. Join as Secret Partner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.user.role).to.eql('SECRET_PARTNER');",
+                  "pm.collectionVariables.set('secretToken', data.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Aaru Secret\",\n  \"email\": \"{{secretEmail}}\",\n  \"password\": \"{{demoPassword}}\",\n  \"invitation_code\": \"{{invitationCode}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/join-secret"
+          }
+        },
+        {
+          "name": "4a. Login as Freedom Partner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.user.role).to.eql('FREEDOM_PARTNER');",
+                  "pm.collectionVariables.set('freedomToken', data.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{freedomEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "4b. Login as Secret Partner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.user.role).to.eql('SECRET_PARTNER');",
+                  "pm.collectionVariables.set('secretToken', data.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{secretEmail}}\",\n  \"password\": \"{{demoPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "4c. Verify Current User (/auth/me)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Pair is ACTIVE', () => pm.expect(pm.response.json().pair_status).to.eql('ACTIVE'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{freedomToken}}", "type": "string" }]
+            },
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Signal & Acknowledgement Lifecycle",
+      "item": [
+        {
+          "name": "5. Send Signal from Secret Partner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.status).to.eql('RED');",
+                  "pm.expect(data.signal.acknowledged).to.eql(false);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{secretToken}}", "type": "string" }]
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Completed Organic Chemistry revision\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/secret/signals"
+          }
+        },
+        {
+          "name": "5b. Fetch Secret Status (Verify RED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.status).to.eql('RED');",
+                  "pm.expect(data.all_acknowledged).to.eql(false);",
+                  "pm.expect(pm.response.text()).to.not.include('Organic Chemistry');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{secretToken}}", "type": "string" }]
+            },
+            "url": "{{baseUrl}}/api/v1/secret/signals/status"
+          }
+        },
+        {
+          "name": "6. Fetch Freedom Dashboard (Unread remains RED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.unread_count).to.be.above(0);",
+                  "pm.expect(data.status).to.eql('RED');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{freedomToken}}", "type": "string" }]
+            },
+            "url": "{{baseUrl}}/api/v1/freedom/dashboard"
+          }
+        },
+        {
+          "name": "6b. Fetch Paginated Freedom Signals",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.expect(pm.response.json().signals).to.be.an('array');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{freedomToken}}", "type": "string" }]
+            },
+            "url": "{{baseUrl}}/api/v1/freedom/signals?page=1&limit=20"
+          }
+        },
+        {
+          "name": "7. Viewed All (Freedom Partner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.unread_count).to.eql(0);",
+                  "pm.expect(data.status).to.eql('GREEN');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{freedomToken}}", "type": "string" }]
+            },
+            "url": "{{baseUrl}}/api/v1/freedom/signals/viewed-all"
+          }
+        },
+        {
+          "name": "8. Fetch Secret Status (Verify RED -> GREEN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.expect(data.status).to.eql('GREEN');",
+                  "pm.expect(data.all_acknowledged).to.eql(true);",
+                  "pm.expect(data.pending_count).to.eql(0);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{secretToken}}", "type": "string" }]
+            },
+            "url": "{{baseUrl}}/api/v1/secret/signals/status"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Security & Edge Cases",
+      "item": [
+        {
+          "name": "10a. Secret Partner blocked from Freedom Dashboard (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{secretToken}}", "type": "string" }]
+            },
+            "url": "{{baseUrl}}/api/v1/freedom/dashboard"
+          }
+        },
+        {
+          "name": "10b. Secret Partner blocked from Viewed All (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{secretToken}}", "type": "string" }]
+            },
+            "url": "{{baseUrl}}/api/v1/freedom/signals/viewed-all"
+          }
+        },
+        {
+          "name": "10c. Freedom Partner blocked from Creating Signal (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{freedomToken}}", "type": "string" }]
+            },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Unauthorized signal\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/secret/signals"
+          }
+        },
+        {
+          "name": "11. Third User Cannot Reuse Invitation Code (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 409', () => pm.response.to.have.status(409));",
+                  "pm.expect(pm.response.json().error.code).to.eql('INVITATION_USED');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Third User\",\n  \"email\": \"intruder@studywallah.local\",\n  \"password\": \"StrongPass123!\",\n  \"invitation_code\": \"{{invitationCode}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/join-secret"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,441 @@
+openapi: 3.0.3
+info:
+  title: StudyWallah API (ProjectAaru)
+  version: 1.0.0
+  description: >
+    REST-only (HTTP/1.1 over TCP) backend API for StudyWallah, a permission-based
+    two-person signal/notification application with FREEDOM_PARTNER and SECRET_PARTNER roles.
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local Go API server
+tags:
+  - name: System
+  - name: Auth
+  - name: Freedom Partner
+  - name: Secret Partner
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    UserDTO:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [FREEDOM_PARTNER, SECRET_PARTNER]
+        pair_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    InvitationDTO:
+      type: object
+      properties:
+        code:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        used:
+          type: boolean
+        used_at:
+          type: string
+          format: date-time
+          nullable: true
+        pair_status:
+          type: string
+          enum: [PENDING, ACTIVE]
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/UserDTO'
+        invitation:
+          $ref: '#/components/schemas/InvitationDTO'
+    RegisterFreedomRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+          example: Aaru Freedom
+        email:
+          type: string
+          format: email
+          example: freedom@studywallah.local
+        password:
+          type: string
+          minLength: 8
+          example: StrongPass123!
+    JoinSecretRequest:
+      type: object
+      required: [name, email, password, invitation_code]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+          example: Aaru Secret
+        email:
+          type: string
+          format: email
+          example: secret@studywallah.local
+        password:
+          type: string
+          minLength: 8
+          example: StrongPass123!
+        invitation_code:
+          type: string
+          example: K7M9P2Q4X8
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+    CreateSignalRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 500
+          example: Completed Physics Electrostatics NCERT summary
+    SignalItemDTO:
+      type: object
+      properties:
+        id:
+          type: string
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        acknowledged:
+          type: boolean
+        acknowledged_at:
+          type: string
+          format: date-time
+          nullable: true
+    FreedomDashboardResponse:
+      type: object
+      properties:
+        today_total:
+          type: integer
+          format: int64
+        unread_count:
+          type: integer
+          format: int64
+        total_count:
+          type: integer
+          format: int64
+        last_update_at:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [RED, GREEN]
+        pair_status:
+          type: string
+          enum: [PENDING, ACTIVE]
+        timezone:
+          type: string
+          example: Asia/Kolkata
+        recent_signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/SignalItemDTO'
+    FreedomSignalsPageResponse:
+      type: object
+      properties:
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/SignalItemDTO'
+        page:
+          type: integer
+          format: int64
+        limit:
+          type: integer
+          format: int64
+        total:
+          type: integer
+          format: int64
+        total_pages:
+          type: integer
+          format: int64
+    ViewedAllResponse:
+      type: object
+      properties:
+        acknowledged_count:
+          type: integer
+          format: int64
+        unread_count:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum: [RED, GREEN]
+        acknowledged_at:
+          type: string
+          format: date-time
+    SecretCreateSignalResponse:
+      type: object
+      properties:
+        signal:
+          type: object
+          properties:
+            id:
+              type: string
+            created_at:
+              type: string
+              format: date-time
+            acknowledged:
+              type: boolean
+        status:
+          type: string
+          enum: [RED, GREEN]
+    SecretStatusResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [RED, GREEN]
+        all_acknowledged:
+          type: boolean
+        pending_count:
+          type: integer
+          format: int64
+        total_sent:
+          type: integer
+          format: int64
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Liveness check
+      responses:
+        '200':
+          description: Service is running
+  /ready:
+    get:
+      tags: [System]
+      summary: Readiness check (verifies MongoDB connectivity)
+      responses:
+        '200':
+          description: Ready
+        '503':
+          description: Database unreachable
+  /api/v1/auth/register-freedom:
+    post:
+      tags: [Auth]
+      summary: Register Freedom Partner and generate single-use invitation code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterFreedomRequest'
+      responses:
+        '201':
+          description: Freedom Partner created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Validation error
+        '409':
+          description: Email already registered
+  /api/v1/auth/join-secret:
+    post:
+      tags: [Auth]
+      summary: Register Secret Partner using a single-use invitation code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JoinSecretRequest'
+      responses:
+        '201':
+          description: Secret Partner paired and created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Validation error or expired invitation
+        '404':
+          description: Invalid invitation code
+        '409':
+          description: Invitation already used, email exists, or pair already active
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Authenticate existing user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current authenticated user profile from JWT + database
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current user profile and pair status
+        '401':
+          description: Missing or invalid JWT
+  /api/v1/freedom/invitation:
+    get:
+      tags: [Freedom Partner]
+      summary: View Freedom Partner invitation code and status
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Invitation details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationDTO'
+        '403':
+          description: Forbidden for SECRET_PARTNER
+  /api/v1/freedom/dashboard:
+    get:
+      tags: [Freedom Partner]
+      summary: Get Freedom Partner dashboard metrics and recent signals (never auto-acknowledges)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FreedomDashboardResponse'
+        '403':
+          description: Forbidden for SECRET_PARTNER
+  /api/v1/freedom/signals:
+    get:
+      tags: [Freedom Partner]
+      summary: Paginated signal history for Freedom Partner
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Paginated signals
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FreedomSignalsPageResponse'
+        '403':
+          description: Forbidden for SECRET_PARTNER
+  /api/v1/freedom/signals/viewed-all:
+    post:
+      tags: [Freedom Partner]
+      summary: Atomically and idempotently acknowledge all currently pending signals
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Signals acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ViewedAllResponse'
+        '403':
+          description: Forbidden for SECRET_PARTNER
+  /api/v1/secret/signals:
+    post:
+      tags: [Secret Partner]
+      summary: Send a new signal from Secret Partner to paired Freedom Partner
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSignalRequest'
+      responses:
+        '201':
+          description: Signal created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretCreateSignalResponse'
+        '403':
+          description: Forbidden for FREEDOM_PARTNER
+  /api/v1/secret/signals/status:
+    get:
+      tags: [Secret Partner]
+      summary: Get server-derived RED/GREEN aggregate status (never leaks messages or Freedom activity)
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Aggregate status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretStatusResponse'
+        '403':
+          description: Forbidden for FREEDOM_PARTNER

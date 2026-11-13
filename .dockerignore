@@ -1,0 +1,10 @@
+.git
+.github
+frontend/node_modules
+frontend/.expo
+backend/studywallah-api
+studywallah-server
+*.log
+.env
+.env.*
+!.env.example
